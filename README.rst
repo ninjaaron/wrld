@@ -170,7 +170,7 @@ own quirks.
 It accepts any flags that can be used in a python regex in the contex of
 ``(?[flags])``, so, ``aiLmsux``. In addition, the ``g`` flag is
 supported, to make it more similar to sed and Perl. While ``/`` is used
-as the delimiter by convention, an non-alphanumeric character may be
+as the delimiter by convention, any non-alphanumeric character may be
 used.
 
 If the replacement is prefixed with ``\e``, a python expresison can be
