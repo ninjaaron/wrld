@@ -85,10 +85,12 @@ import shlex, shutil, inspect
 import collections
 import argparse
 import subprocess as sp
+import pathlib
 
 BRACES =  '\U000c41bb'
 BS = '\U000c41bd'
 DELIM = '\U000c41be'
+BUILTINS = {}
 
 class GenerousNamespace(dict):
     '''namespace that imports modules lazily.'''
@@ -174,7 +176,7 @@ def code_sub(args, stdin):
             sub_indicies[index] = 'cmd'
 
         else:
-            if arg[0:2] in ('\@', '\|', '\s'):
+            if arg[0] == '\\':
                 arg = arg[1:]
             code_subbed_args.append(arg)
 
@@ -185,44 +187,88 @@ def print_err(message):
     print('\x1b[31mError\x1b[0m:', message, file=sys.stderr)
 
 
-def check_length(cmd, args, num):
-    if len(args) != num:
+def check_args(cmd, num, args):
+    if len(args) - 1 != num:
         word = 'argument' if num == 1 else 'arguments'
         print_err('%s builtin takes exactly %d %s' % (cmd, num, word))
         sys.exit(1)
 
 
+def builtin(num, resolve_dest=False):
+    def nummer(func):
+        cmd = func.__name__
+
+        def resolved(args):
+            if resolve_dest:
+                if os.path.isdir(args[-1]):
+                    p = pathlib.Path(args[-1], os.path.basename(args[0]))
+                    args[-1] = str(p)
+            return func(args)
+
+        BUILTINS.update({func.__name__: (resolved, num)})
+
+        return resolved
+    return nummer
+
+
+@builtin(2)
 def move(args):
-    check_length('move', args, 2)
     shutil.move(*args)
 
 
+@builtin(2)
 def copy(args):
-    check_length('copy', args, 2)
     try:
         shutil.copy(*args)
     except IsADirectoryError:
         shutil.copytree(*args)
 
 
+@builtin(2, resolve_dest=True)
 def slink(args):
-    check_length('slink', args, 2)
+    os.symlink(args[0], args[1])
+
+
+@builtin(2, resolve_dest=True)
+def srlink(args):
     os.symlink(os.path.abspath(args[0]), args[1])
 
 
+@builtin(2, resolve_dest=True)
 def hlink(args):
-    check_length('hlink', args, 2)
     try:
         os.link(*args)
     except IsADirectoryError as e:
         print_err(e)
 
-BUILTINS = {
-  'move': move,
-  'copy': copy,
-  'slink': slink,
-  'hlink': hlink,
-}
+@builtin(1)
+def remove(args):
+    '''remove stuff recursively'''
+    for path, dirs, files in os.walk(args[0], topdown=False):
+
+        for f in files:
+            remover(os.remove, path, f)
+
+        for d in dirs:
+            remover(os.rmdir, path, d)
+    try:
+        remover(os.rmdir, args[0])
+    except NotADirectoryError:
+        remover(os.remove, args[0])
+
+
+def remover(func, path, file=None):
+        p = pathlib.Path(path, file) if file else path
+        try:
+            func(str(p))
+        except PermissionError as e:
+            print_err(e)
+
+
+@builtin(1)
+def makedir(args):
+    os.makedirs(args[0], exist_ok=True)
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -239,6 +285,8 @@ def main():
     a = ap.parse_args()
 
     args = [arg.replace('\{}', BRACES) for arg in a.args]
+    if args[0] in BUILTINS:
+        check_args(args[0], BUILTINS[args[0]][1], args)
     if a.file_list:
         stdin = '\n'.join(a.file_list)
         items = a.file_list
@@ -278,7 +326,7 @@ def main():
 
         cmd, args = cmd_subbed_args[0], cmd_subbed_args[1:]
         try:
-            BUILTINS[cmd](args)
+            BUILTINS[cmd][0](args)
         except FileExistsError as e:
             print_err(e)
         except KeyError:

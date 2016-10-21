@@ -83,6 +83,13 @@ globbing and get quite a lot done this way.
   preforming may be prefomed with the ``find`` command, so compatibility
   is key.
 
+flags
+~~~~~
+wrld is stupid about flags with the command it wraps. If you want to
+send a flag through to whatever binary you use in your loop, it needs a
+backslash in front of it. This means you actually have to use a double
+backslash ``\\`` in most shells to get it through.
+
 optimize
 ~~~~~~~~
 
@@ -108,14 +115,15 @@ like "move", "copy", "hlink" and "slink".
   link because of the physiological responce many people experience when
   they realize how powerful this idea can be.
 - ``slink`` creates soft links. These are about like shortcuts on the
-  great and glorious Windows operating system. The target for the link
-  is expanded to its absolute path (like ``ln -sr``), which is normally
-  what you want, unless it isn't. If you need something else, just use
-  ``ln`` directly.  They are called "soft" links because of what happens
-  to you when you realize the original file has moved and all your links
-  are broken. You never have this problem with "hard" links, but you
-  can't use them across different partitions/devices or on directories,
-  so, eh.
+  great and glorious Windows operating system. They are called "soft"
+  links because of what happens to you when you realize the original
+  file has moved and all your links are broken. You never have this
+  problem with "hard" links, but you can't use them across different
+  partitions/devices or on directories, so, eh.
+- ``srlink`` expand relative paths to absolute paths when soft linking.
+  Like ``ln -sr``.
+- ``remove`` remove stuff. recursively. take care.
+- ``makedir`` makes directories... works like ``mkdir -p``
 
 Other builtins may be added as they occur to me or users ask for them.
 ``mv``, ``cp`` and ``ln`` are commands I frequently find myself needing
