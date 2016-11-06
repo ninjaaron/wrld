@@ -86,6 +86,7 @@ import collections
 import argparse
 import subprocess as sp
 import pathlib
+from functools import wraps
 
 BRACES =  '\U000c41bb'
 BS = '\U000c41bd'
@@ -119,6 +120,7 @@ def cmdsub(arg, line, num):
 
 
 def subsub(arg, line, num):
+    '''preforms regex substitution on current line of stdin for an arg'''
     pat, rep = arg
     if inspect.iscode(rep):
         return [re.sub(pat, lambda m: eval(rep, GenerousNamespace(m=m)),
@@ -127,19 +129,30 @@ def subsub(arg, line, num):
 
 
 def pipesub(arg, line, num):
+    '''return the results of the already-completed (in code_sub()) pipe thing
+    that match the current line'''
     return [arg[num]]
 
 
 def code_sub(args, stdin):
+    '''add do preprocessing on different types of command line arguments before
+    entering the the main loop. compile the code for @py args, convert
+    substitution args from a sed-like format to re.sub arguments, run all input
+    through the filters with | arguments, and simply mark off the @ arguments.
+    It also removes the backslash from escaped arguments'''
     code_subbed_args = []
+    # sub_indicies is a dictionary marking off the index for args where special
+    # action needs to be taken, we refer back to it in the main loop.
     sub_indicies = {}
     for index, arg in enumerate(args):
 
+        # handle @py args
         if arg.startswith('@py '):
             code_subbed_args.append(compile(arg[4:].lstrip(),
                                             '<string>', 'eval'))
             sub_indicies[index] = 'py'
 
+        # handle substitution, 's' args
         elif arg.startswith('s') and not arg[1].isalnum():
             dlmtr = arg[1]
             sub = arg.replace(r'\\', BS
@@ -160,6 +173,7 @@ def code_sub(args, stdin):
             code_subbed_args.append((pat, rep))
             sub_indicies[index] = 'sub'
 
+        # handle pipe filter args
         elif arg[0] == '|':
             filtered = sp.run(
                         shlex.split(arg[1:]),
@@ -171,10 +185,12 @@ def code_sub(args, stdin):
             code_subbed_args.append(filtered)
             sub_indicies[index] = 'pipe'
 
+        # handle @ filter args
         elif arg[0] == '@':
             code_subbed_args.append(arg[1:])
             sub_indicies[index] = 'cmd'
 
+        # remove backslash from escaped args and flags
         else:
             if arg[0] == '\\':
                 arg = arg[1:]
@@ -184,10 +200,13 @@ def code_sub(args, stdin):
 
 
 def print_err(message):
+    '''print error messages to stderr with color and style!'''
     print('\x1b[31mError\x1b[0m:', message, file=sys.stderr)
 
 
-def check_args(cmd, num, args):
+def check_args(cmd, args):
+    '''make sure builtins have the required number of arguments supplied'''
+    num = BUILTINS[cmd][0]
     if len(args) - 1 != num:
         word = 'argument' if num == 1 else 'arguments'
         print_err('%s builtin takes exactly %d %s' % (cmd, num, word))
@@ -195,9 +214,19 @@ def check_args(cmd, num, args):
 
 
 def builtin(num, resolve_dest=False):
+    '''decorator factory for builtin commands. num is the number of arguments
+    the builtin expects. If resolve_dest is True and the final argument is a
+    directory name, the basename of the initial argument is appended to the
+    destination. e.g. in `copy ~/Downloads/a_photo.jpg ~/Pictures`, the last
+    argument becomes ~/Pictures/a_photo.jpg, much like it does with most
+    command line utilities (and like it does not with many python fs utilities)
+
+    In addition, builtin functions are placed in a global dictionary (BUILTINS)
+    for lookup by name. This is how they are actually called.'''
     def nummer(func):
         cmd = func.__name__
 
+        @wraps(func)
         def resolved(args):
             if resolve_dest:
                 if os.path.isdir(args[-1]):
@@ -213,11 +242,13 @@ def builtin(num, resolve_dest=False):
 
 @builtin(2)
 def move(args):
+    '''move stuff (recursively)'''
     shutil.move(*args)
 
 
 @builtin(2)
 def copy(args):
+    '''copy stuff (recursively)'''
     try:
         shutil.copy(*args)
     except IsADirectoryError:
@@ -226,16 +257,19 @@ def copy(args):
 
 @builtin(2, resolve_dest=True)
 def slink(args):
+    '''make symlinks'''
     os.symlink(args[0], args[1])
 
 
 @builtin(2, resolve_dest=True)
 def srlink(args):
+    '''make symlinks where a relative path is expanded to an absolute path'''
     os.symlink(os.path.abspath(args[0]), args[1])
 
 
 @builtin(2, resolve_dest=True)
 def hlink(args):
+    '''make hardlinks'''
     try:
         os.link(*args)
     except IsADirectoryError as e:
@@ -243,7 +277,7 @@ def hlink(args):
 
 @builtin(1)
 def remove(args):
-    '''remove stuff recursively'''
+    '''remove stuff (recursively). Take care!'''
     for path, dirs, files in os.walk(args[0], topdown=False):
 
         for f in files:
@@ -258,15 +292,17 @@ def remove(args):
 
 
 def remover(func, path, file=None):
-        p = pathlib.Path(path, file) if file else path
-        try:
-            func(str(p))
-        except PermissionError as e:
-            print_err(e)
+    '''helper function for remove() to faciliatate recursive deletion'''
+    p = pathlib.Path(path, file) if file else path
+    try:
+        func(str(p))
+    except PermissionError as e:
+        print_err(e)
 
 
 @builtin(1)
 def makedir(args):
+    '''make directories. like mkdir -p'''
     os.makedirs(args[0], exist_ok=True)
 
 
@@ -281,6 +317,9 @@ def main():
 
     ap.add_argument('-q', '--no-echo', action='store_true',
                     help='suppress command echo')
+
+    ap.add_argument('-t', '--test', action='store_true',
+                    help='test-run that only prints resulting commands')
 
     a = ap.parse_args()
 
@@ -321,8 +360,12 @@ def main():
                         }[sub_indicies[index]](arg, line, num))
             else:
                 cmd_subbed_args.append(arg)
+
         if not a.no_echo:
             print(' '.join(map(shlex.quote, cmd_subbed_args)), file=sys.stderr)
+
+        if a.test:
+            continue
 
         cmd, args = cmd_subbed_args[0], cmd_subbed_args[1:]
         try:
