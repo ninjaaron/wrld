@@ -141,6 +141,10 @@ context like this...), or if you have filenames with newlines, like a
 freak. So, it will work in most cases. One day I may implement this
 properly with asyncronous piping, so this won't be a problem.
 
+Note that, until this becomes an asyncronous pipe, this is a speed
+enhancement, but piping in this way consumes additional memory, which
+may make it infeasable for very large tasks in a low memory environment.
+
 There are also two buitin filters. ``@py`` allows you to use arbitrary
 python expressions as a filter. The current line or filename is
 available in the execution context as ``i``.
