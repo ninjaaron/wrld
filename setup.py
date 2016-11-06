@@ -1,16 +1,9 @@
 from setuptools import setup
-try:
-    from urllib import request
-except ImportError:
-    import urllib2 as request
-
-fastep = request.urlopen('https://raw.githubusercontent.com/ninjaaron/fast-entry_points/master/fastentrypoints.py')
-namespace = {}
-exec(fastep.read(), namespace)
+import fastentrypoints
 
 setup(
     name='wrld',
-    version='0.2',
+    version='0.3',
     author='Aaron Christianson',
     license='BSD',
     author_email='ninjaaron@gmail.com',

@@ -56,7 +56,9 @@ line.  Use ``\{}`` if you need a literal '{}'. However, if you can't do
 it with sed or awk, there's always ``perl -pe``, and if you can't do it
 with ``perl -pe``, I don't want to know about it. You can also see that
 ``wrld`` echos back the commands it constructs. You can shut it up with
-``-q``/``--no-echo``.
+``-q``/``--no-echo``. You can also do a "test run" to see what the
+generated commands will be without actually running them, using
+``-t``/``--test`` flags.
 
 Because POSIX stupidly allows newlines in file names, this is
 actually a "dangerous" example unless can guarantee there are no idiot
@@ -155,8 +157,8 @@ available in the execution context as ``i``.
 
 ``@py`` uses a little namespace magic that will import any module you
 happen to use in your expression on demand. Note that only expressions
-and not statements are supported. ``@py`` should also do the right thing
-with newlines in file names.
+and not statements are supported. ``@py`` combined with ``-f`` should
+also do the right thing with newlines in file names.
 
 The other builtin filter is ``s``. The syntax looks a bit like ``sed``,
 but it's python regex, so refer to the relevant docs if you're not
