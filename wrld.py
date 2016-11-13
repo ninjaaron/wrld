@@ -204,7 +204,7 @@ def print_err(message):
     print('\x1b[31mError\x1b[0m:', message, file=sys.stderr)
 
 
-def check_args(cmd, args):
+def check_args(cmd, num, args):
     '''make sure builtins have the required number of arguments supplied'''
     num = BUILTINS[cmd][0]
     if len(args) - 1 != num:
@@ -224,8 +224,6 @@ def builtin(num, resolve_dest=False):
     In addition, builtin functions are placed in a global dictionary (BUILTINS)
     for lookup by name. This is how they are actually called.'''
     def nummer(func):
-        cmd = func.__name__
-
         @wraps(func)
         def resolved(args):
             if resolve_dest:
