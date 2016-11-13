@@ -204,9 +204,9 @@ def print_err(message):
     print('\x1b[31mError\x1b[0m:', message, file=sys.stderr)
 
 
-def check_args(cmd, num, args):
+def check_args(cmd, args):
     '''make sure builtins have the required number of arguments supplied'''
-    num = BUILTINS[cmd][0]
+    num = BUILTINS[cmd][1]
     if len(args) - 1 != num:
         word = 'argument' if num == 1 else 'arguments'
         print_err('%s builtin takes exactly %d %s' % (cmd, num, word))
@@ -323,7 +323,7 @@ def main():
 
     args = [arg.replace('\{}', BRACES) for arg in a.args]
     if args[0] in BUILTINS:
-        check_args(args[0], BUILTINS[args[0]][1], args)
+        check_args(args[0], args)
     if a.file_list:
         stdin = '\n'.join(a.file_list)
         items = a.file_list
