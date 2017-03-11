@@ -385,8 +385,8 @@ def main():
         # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
         # do stuff with other flags
-        if a.preview:
-            sp.run(shlex.split(a.preview) + [line])
+        if a.previewer:
+            sp.run(shlex.split(a.previewer) + [line])
 
         if not a.no_echo:
             print(' '.join(map(shlex.quote, cmd_subbed_args)), file=sys.stderr)
