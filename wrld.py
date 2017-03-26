@@ -80,18 +80,23 @@ or:
 For more information on these builtins, please view the README, which
 can be found at https://github.com/ninjaaron/wrld.
 """
-import sys, os, re
-import shlex, shutil, inspect
+import sys
+import os
+import re
+import shlex
+import shutil
+import inspect
 import collections
 import argparse
 import subprocess as sp
 import pathlib
 from functools import wraps
 
-BRACES =  '\U000c41bb'
+BRACES = '\U000c41bb'
 BS = '\U000c41bd'
 DELIM = '\U000c41be'
 BUILTINS = {}
+
 
 class GenerousNamespace(dict):
     """namespace that imports modules lazily."""
@@ -116,16 +121,16 @@ def cmdsub(arg, line, num):
     """substitutes the return value of an external command for an arg"""
     cmd = shlex.split(arg)
     return [sp.run(cmd, input=line, stdout=sp.PIPE,
-                  universal_newlines=True).stdout.rstrip()]
+                   universal_newlines=True).stdout.rstrip()]
 
 
 def subsub(arg, line, num):
     """preforms regex substitution on current line of stdin for an arg"""
-    pat, rep = arg
+    pat, rep, count = arg
     if inspect.iscode(rep):
         return [re.sub(pat, lambda m: eval(rep, GenerousNamespace(m=m)),
-                      line)]
-    return [re.sub(pat, rep, line)]
+                       line)]
+    return [re.sub(pat, rep, line, count=count)]
 
 
 def pipesub(arg, line, num):
@@ -157,9 +162,8 @@ def preprocess_args(args, stdin):
         # handle substitution, 's' args
         elif arg.startswith('s') and not arg[1].isalnum():
             dlmtr = arg[1]
-            sub = arg.replace(r'\\', BS
-                    ).replace('\\'+dlmtr, DELIM
-                    ).split(dlmtr)[1:]
+            sub = arg.replace(r'\\', BS).replace(
+                '\\'+dlmtr, DELIM).split(dlmtr)[1:]
 
             pat, rep, flags = (i.replace(BS, r'\\').replace(DELIM, dlmtr)
                                for i in sub)
@@ -172,7 +176,7 @@ def preprocess_args(args, stdin):
             if flags:
                 pat = '(?%s)%s' % (flags, pat)
 
-            code_subbed_args.append((pat, rep))
+            code_subbed_args.append((pat, rep, count))
             sub_indicies[index] = 'sub'
 
         # handle pipe filter args
@@ -219,45 +223,53 @@ def print_err(message):
 def check_args(cmd, args):
     """make sure builtins have the required number of arguments supplied"""
     num = BUILTINS[cmd][1]
-    if len(args) - 1 != num:
-        word = 'argument' if num == 1 else 'arguments'
-        print_err('%s builtin takes exactly %d %s' % (cmd, num, word))
+    if isinstance(num, int):
+        num = [num]
+    else:
+        num = list(range(num[0], num[1]+1))
+    if len(args) - 1 not in num:
+        word = 'argument' if num == [1] else 'arguments'
+        num = str(num[0]) if len(num) == 1 else '%d-%d' % (num[0], num[-1])
+        print_err('%s builtin takes %s %s' % (cmd, num, word))
         sys.exit(1)
 
 
-def builtin(num, resolve_dest=False):
+def builtin(num, add_line=None, resolve_dest=False):
     """decorator factory for builtin commands. num is the number of arguments
-    the builtin expects. If resolve_dest is True and the final argument is a
-    directory name, the basename of the initial argument is appended to the
-    destination. e.g. in `copy ~/Downloads/a_photo.jpg ~/Pictures`, the last
-    argument becomes ~/Pictures/a_photo.jpg, much like it does with most
-    command line utilities (and like it does not with many python fs utilities)
+    the builtin expects. It may be a tuple containting the minimum and maximum
+    number of arguments.
 
-    In addition, builtin functions are placed in a global dictionary (BUILTINS)
-    for lookup by name. This is how they are actually called.
+    If resolve_dest is True and the final argument is a directory name, the
+    basename of the initial argument is appended to the destination. e.g. in
+    `copy ~/Downloads/a_photo.jpg ~/Pictures`, the last argument becomes
+    ~/Pictures/a_photo.jpg, much like it does with most command line utilities
+    (and like it does not with many python fs utilities)
+
+    add_line, if given, should be an integer. If the given number of arguments
+    equals that number, the line or filename being processed will be given as
+    the initial argument.
     """
     def nummer(func):
         @wraps(func)
-        def resolved(args):
-            if resolve_dest:
-                if os.path.isdir(args[-1]):
-                    p = pathlib.Path(args[-1], os.path.basename(args[0]))
-                    args[-1] = str(p)
+        def resolved(args, line):
+            if resolve_dest and os.path.isdir(args[-1]):
+                p = pathlib.Path(args[-1], os.path.basename(args[0]))
+                args[-1] = str(p)
+            if len(args) == add_line:
+                args.insert(0, line)
             return func(args)
-
         BUILTINS.update({func.__name__: (resolved, num)})
-
         return resolved
     return nummer
 
 
-@builtin(2)
+@builtin((1, 2), add_line=1)
 def move(args):
     """move stuff (recursively)"""
     shutil.move(*args)
 
 
-@builtin(2)
+@builtin((1, 2), add_line=1)
 def copy(args):
     """copy stuff (recursively)"""
     try:
@@ -266,49 +278,31 @@ def copy(args):
         shutil.copytree(*args)
 
 
-@builtin(2, resolve_dest=True)
+@builtin((1, 2), add_line=1, resolve_dest=True)
 def slink(args):
     """make symlinks"""
     os.symlink(args[0], args[1])
 
 
-@builtin(2, resolve_dest=True)
+@builtin((1, 2), add_line=1, resolve_dest=True)
 def srlink(args):
     """make symlinks where a relative path is expanded to an absolute path"""
     os.symlink(os.path.abspath(args[0]), args[1])
 
 
-@builtin(2, resolve_dest=True)
+@builtin((1, 2), add_line=1, resolve_dest=True)
 def hlink(args):
     """make hardlinks"""
-    try:
-        os.link(*args)
-    except IsADirectoryError as e:
-        print_err(e)
+    os.link(*args)
 
-@builtin(1)
+
+@builtin((0, 1), add_line=0)
 def remove(args):
     """remove stuff (recursively). Take care!"""
-    for path, dirs, files in os.walk(args[0], topdown=False):
-
-        for f in files:
-            remover(os.remove, path, f)
-
-        for d in dirs:
-            remover(os.rmdir, path, d)
     try:
-        remover(os.rmdir, args[0])
-    except NotADirectoryError:
-        remover(os.remove, args[0])
-
-
-def remover(func, path, file=None):
-    """helper function for remove() to faciliatate recursive deletion"""
-    p = pathlib.Path(path, file) if file else path
-    try:
-        func(str(p))
-    except PermissionError as e:
-        print_err(e)
+        os.remove(args[0])
+    except IsADirectoryError:
+        shutil.rmtree(args[0])
 
 
 @builtin(1)
@@ -343,7 +337,7 @@ def main():
     a = ap.parse_args()
 
     if a.command_string:
-        args = shlex.split(args[0])
+        args = shlex.split(a.args[0])
     args = [arg.replace('\{}', BRACES) for arg in a.args]
 
     if args[0] in BUILTINS:
@@ -360,29 +354,27 @@ def main():
             items = (i.rstrip('\n') for i in sys.stdin)
 
     sub_indicies, args_with_code = preprocess_args(args, stdin)
+    funcs = {'py': pysub, 'cmd': cmdsub, 'sub': subsub, 'pipe': pipesub}
 
     for i, line in enumerate(items):
 
-        # convert all args to strings # # # # # # # # # # # # #
-        #                                                     #
-        # This should be a function, but I can't be bothered  #
-        # to pass in all the parameters.                      #
-        # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-        namespace.update(i=line)                              #
-                                                              #
-        args_with_line = insert_line(line, args_with_code)    #
-        cmd_subbed_args = []                                  #
-        for index, arg in enumerate(args_with_line):          #
-            if index in sub_indicies:                         #
-                cmd_subbed_args.extend({                      #
-                        'py': pysub,                          #
-                        'cmd': cmdsub,                        #
-                        'sub': subsub,                        #
-                        'pipe': pipesub                       #
-                        }[sub_indicies[index]](arg, line, i)) #
-            else:                                             #
-                cmd_subbed_args.append(arg)                   #
-        # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+        # convert all args to strings # # # # # # # # # # # #
+        #                                                   #
+        # This should be a function, but I can't be         #
+        # bothered to pass in all the parameters. I can,    #
+        # however, be bothered to draw this box.            #
+        # # # # # # # # # # # # # # # # # # # # # # # # # # #
+        namespace.update(i=line)                            #
+        args_with_line = insert_line(line, args_with_code)  #
+        cmd_subbed_args = []                                #
+        for index, arg in enumerate(args_with_line):        #
+            if index in sub_indicies:                       #
+                cmd_subbed_args.extend(                     #
+                    funcs[sub_indicies[index]](             #
+                        arg, line, i))                      #
+            else:                                           #
+                cmd_subbed_args.append(arg)                 #
+        # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
         # do stuff with other flags
         if a.previewer:
@@ -399,10 +391,10 @@ def main():
 
         cmd, args = cmd_subbed_args[0], cmd_subbed_args[1:]
         try:
-            BUILTINS[cmd][0](args)
-        except FileExistsError as e:
-            print_err(e)
+            BUILTINS[cmd][0](args, line)
         except KeyError:
             if cmd[1:] in BUILTINS and cmd[0] == '\\':
                 cmd = cmd[1:]
             sp.run([cmd]+args)
+        except Exception as e:
+            print_err(e)
