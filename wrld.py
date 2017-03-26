@@ -170,7 +170,7 @@ def preprocess_args(args, stdin):
             count = 0 if 'g' in flags else 1
             flags = flags.replace('g', '')
             if flags:
-                pat = '(?%s)' % flags
+                pat = '(?%s)%s' % (flags, pat)
 
             code_subbed_args.append((pat, rep))
             sub_indicies[index] = 'sub'
