@@ -139,6 +139,7 @@ def pipesub(arg, line, num):
     """
     return [arg[num]]
 
+FUNCS = {'py': pysub, 'cmd': cmdsub, 'sub': subsub, 'pipe': pipesub}
 
 def preprocess_args(args, stdin):
     """add do preprocessing on different types of command line arguments before
@@ -205,9 +206,9 @@ def preprocess_args(args, stdin):
     return sub_indicies, code_subbed_args
 
 
-def insert_line(line, args_with_code):
+def insert_line(line, args):
     args_with_line = []
-    for arg in args_with_code:
+    for arg in args:
         if isinstance(arg, str):
             arg = arg.replace('{}', line)
             arg = arg.replace(BRACES, '{}')
@@ -252,13 +253,13 @@ def builtin(num, add_line=None, resolve_dest=False):
     def nummer(func):
         @wraps(func)
         def resolved(args, line):
+            if len(args) == add_line:
+                args.insert(0, line)
             if resolve_dest and os.path.isdir(args[-1]):
                 p = pathlib.Path(args[-1], os.path.basename(args[0]))
                 args[-1] = str(p)
-            if len(args) == add_line:
-                args.insert(0, line)
             return func(args)
-        BUILTINS.update({func.__name__: (resolved, num)})
+        BUILTINS.update({func.__name__: (resolved, num, add_line)})
         return resolved
     return nummer
 
@@ -353,10 +354,10 @@ def main():
             stdin = None
             items = (i.rstrip('\n') for i in sys.stdin)
 
-    sub_indicies, args_with_code = preprocess_args(args, stdin)
-    funcs = {'py': pysub, 'cmd': cmdsub, 'sub': subsub, 'pipe': pipesub}
+    sub_indicies, compiled_args = preprocess_args(args, stdin)
 
     for i, line in enumerate(items):
+        namespace.update(i=line)
 
         # convert all args to strings # # # # # # # # # # # #
         #                                                   #
@@ -364,13 +365,12 @@ def main():
         # bothered to pass in all the parameters. I can,    #
         # however, be bothered to draw this box.            #
         # # # # # # # # # # # # # # # # # # # # # # # # # # #
-        namespace.update(i=line)                            #
-        args_with_line = insert_line(line, args_with_code)  #
+        args_with_line = insert_line(line, compiled_args)   #
         cmd_subbed_args = []                                #
         for index, arg in enumerate(args_with_line):        #
             if index in sub_indicies:                       #
                 cmd_subbed_args.extend(                     #
-                    funcs[sub_indicies[index]](             #
+                    FUNCS[sub_indicies[index]](             #
                         arg, line, i))                      #
             else:                                           #
                 cmd_subbed_args.append(arg)                 #
