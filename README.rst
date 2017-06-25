@@ -2,7 +2,7 @@ wrld: Avoid writing loops in shell one-liners
 ---------------------------------------------
 
 You may think that ``wrld`` is some abbreviated form of "world". This is
-not the case. The world is lame. What isn't lame is iterating on stdin.
+not the case. The world is lame. What isn't lame is iterating on ``stdin``.
 Probably my favorite thing to do. In the shell, the sanest way to do
 this is with a ``while read line; do`` loop. Forget the world. ``wrld``
 is the future of iteration.
