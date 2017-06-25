@@ -3,7 +3,7 @@ import fastentrypoints
 
 setup(
     name='wrld',
-    version='0.6',
+    version='0.7',
     author='Aaron Christianson',
     license='BSD',
     author_email='ninjaaron@gmail.com',
