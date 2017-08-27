@@ -87,10 +87,14 @@ globbing and get quite a lot done this way.
 
 flags
 ~~~~~
-wrld is stupid about flags with the command it wraps. If you want to
-send a flag through to whatever binary you use in your loop, it needs a
-backslash in front of it. This means you actually have to use a double
-backslash ``\\`` in most shells to get it through.
+wrld is stupid about flags with the command it wraps. However, courtesy
+of ``argparse``, you can tell wrld that no further flags are coming with
+the ``--`` argument.
+
+.. code:: bash
+
+  $ find -type d | wrld -- mv -v {} /some/dir
+  ...
 
 optimize
 ~~~~~~~~
